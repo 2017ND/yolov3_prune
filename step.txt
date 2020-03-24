@@ -1,0 +1,45 @@
+一、准备训练数据
+    1.利用labelImg标注样本，将xml文件存放到./data/Annotations文件夹下;将原始图片存放到./data/images文件夹下;
+    2.运行python makeTxt.py得到./data/imageSets/Main文件夹下的test.txt train.txt trainval.txt val.txt;
+    3.修改voc_labels.py的classes,运行python voc_labels.py得到./data/ImageSets文件夹下的test.txt train.txt val.txt文件和./data/labels下的文件;
+    4.修改./data文件夹下的voc.data和voc.names,具体修改见文件；
+二.训练
+    1.正常训练
+    运行python train.py --epochs X --batch-size X --cfg cfg/文件路径 --data data/voc.data --weights weights/路径文件（可输入conv.75/15 .pt .weight)
+    2.稀疏训练
+    (1)正常训练保存的pt权重包含epoch信息，运行convertPt2weight.py转换darknet weights去除掉epoch信息（会在原文件夹下生成converted.weights），使用darknet weights从epoch 0开始稀疏训练
+    (2)运行python train.py --epochs X --batch-size X --cfg XX --accumulate 1 --data XX --weights XX -sr --s 0.01 --prune 0
+    -sr开启稀疏化，--s指定稀疏因子大小，--prune指定稀疏类型
+    --prune 0为正常剪枝和规整剪枝的稀疏化
+    --prune 1为极限剪枝的稀疏化
+    --prune 2为Tiny剪枝的稀疏化
+    3.模型剪枝
+    🕐正常剪枝 python normal_prune.py
+    规整剪枝 python regular_prune.py
+    极限剪枝 python shortcut_prune.py
+    Tiny剪枝 python prune_tiny_yolo.py
+    需要注意的是，这里需要在.py文件内，将cfg内的cfg和weights变量指向第2步稀疏化后生成的cfg文件和weights文件。(如cfg/yolov3-voc.cfg )
+    此外，可通过增大代码中percent的值来获得更大的压缩率。（若稀疏化不到位，且percent值过大，程序会报错。）
+    模型剪枝后，会在cfg/和weights/下产生新的cfg和weights文件，可用于fine-tuning。（如prune_0.5_yolov3-voc.cfg和yolov3_hand_normal_pruning_0.5percent.weights)
+    4.恢复训练
+    剪枝后的模型虽说参数层数减少了，但是会影响精度。因此需要进行恢复训练
+    python train.py --epochs X --batch-size X --cfg XX --accumulate 1 --data XX --weights XX
+    此时的cfg和weights记得改为剪枝生成的对应文件。（如prune_0.5_yolov3-voc.cfg和yolov3_hand_normal_pruning_0.5percent.weights)
+    5.迭代
+    可以通过训练-稀疏-剪枝-恢复-稀疏-剪枝-恢复等迭代进行模型压缩。
+
+注：对应的修改文件——修改配置cfg文件
+   修改batchsize和subdivisions:两者的除数输入到模型，根据计算机性能进行修改
+   修改width、weight和channels：修改输入图片尺寸，可以加速推理（可能会影响mAP）
+   修改输入yolo层的参数:
+     (1)修改yolo层的classes(类别数目);
+     (2)修改输入yolo层的fliters(3*(num_classes+5),yolov3为3个尺度检测，每个尺度的参数为num_classes*(确定框的中心位置x,y偏差，width，height偏差，前景背景置信度)
+
+三. 推理检测
+   1. 运行python detect.py --cfg cfg/yolov3-voc.cfg --data data/XXX.data --weights weights/XXX  .... 即可检测data/samples中的图片；
+      在output中输出结果；
+   2. 行python detect.py --cfg cfg/yolov3-voc.cfg --data data/XXX.data --weights weights/XXX --souce 0/rtsp:// 即可检测视频，在output中输出结果
+
+
+对比：
+正常训练 效率 0.025s
